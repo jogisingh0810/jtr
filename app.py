@@ -13,12 +13,12 @@ df = yf.download(symbol, interval="5m", period="1d")
 # Calculate indicators
 from ta.trend import EMAIndicator
 df["Close"] = df["Close"].squeeze()
-ema20 = EMAIndicator(close=df["Close"], window=20).ema_indicator()
+ema20 = df["Close"].ewm(span=20, adjust=False).mean()
 if isinstance(ema20.values, np.ndarray) and ema20.values.ndim > 1:
     ema20 = pd.Series(ema20.values.flatten(), index=df.index, name="EMA20")
 ema20 = pd.Series(EMAIndicator(close=df["Close"], window=20).ema_indicator().values.ravel(), name="EMA20")
 df["EMA20"] = ema20
-ema50 = EMAIndicator(close=df["Close"], window=50).ema_indicator()
+ema50 = df["Close"].ewm(span=50, adjust=False).mean()
 if isinstance(ema50.values, np.ndarray) and ema50.values.ndim > 1:
     ema50 = pd.Series(ema50.values.flatten(), index=df.index, name="EMA50")
 ema50 = pd.Series(EMAIndicator(close=df["Close"], window=20).ema_indicator().values.ravel(), name="EMA50")
