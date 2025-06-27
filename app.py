@@ -1,7 +1,7 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import ta
+from ta.trend import EMAIndicator
 
 st.set_page_config(layout="wide")
 
