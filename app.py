@@ -13,10 +13,13 @@ df = yf.download(symbol, interval="5m", period="1d")
 # Calculate indicators
 from ta.trend import EMAIndicator
 df["Close"] = df["Close"].squeeze()
+ema20 = EMAIndicator(close=df["Close"], window=20).ema_indicator()
 ema20 = pd.Series(EMAIndicator(close=df["Close"], window=20).ema_indicator().values.ravel(), name="EMA20")
 df["EMA20"] = ema20
+ema50 = EMAIndicator(close=df["Close"], window=50).ema_indicator()
 ema50 = pd.Series(EMAIndicator(close=df["Close"], window=20).ema_indicator().values.ravel(), name="EMA50")
 df["EMA50"] = ema50
+rsi = RSIIndicator(close=df["Close"], window=14).rsi
 df["RSI"] = ta.momentum.RSIIndicator(df["Close"]).rsi()
 
 # Display chart
