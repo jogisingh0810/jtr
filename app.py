@@ -1,32 +1,35 @@
 import streamlit as st
 import pandas as pd
-import ccxt
+import yfinance as yf
 import ta
 import plotly.graph_objects as go
 
-# Initialize Binance exchange for BTC/USDT data
-exchange = ccxt.binance({'enableRateLimit': True})
-
+# Supported symbols
 SYMBOLS = {
-    'BTC/USD': 'BTC/USDT',
-    'GOLD (XAU/USD)': 'OANDA:XAUUSD',  # TradingView symbol for Gold
-    'BTC': 'BTC/USDT',
+    'BTC/USD': 'BTC-USD',
+    'GOLD (XAU/USD)': 'XAUUSD=X',
 }
 
-TIMEFRAMES = ['5m', '15m']
+TIMEFRAMES = {
+    '5m': '5m',
+    '15m': '15m',
+}
 
 @st.cache_data(ttl=60)
-def fetch_ohlcv(symbol, timeframe='5m', limit=200):
-    if symbol != 'BTC/USDT':
-        return pd.DataFrame()
+def fetch_yfinance_data(symbol, interval='5m', period='1d'):
     try:
-        data = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-        df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df.set_index('timestamp', inplace=True)
+        df = yf.download(tickers=symbol, interval=interval, period=period, progress=False)
+        df = df.rename(columns={
+            'Open': 'open',
+            'High': 'high',
+            'Low': 'low',
+            'Close': 'close',
+            'Volume': 'volume'
+        })
+        df.index.name = 'timestamp'
         return df
     except Exception as e:
-        st.warning(f"Error fetching data: {str(e)}")
+        st.warning(f"Error fetching data for {symbol}: {str(e)}")
         return pd.DataFrame()
 
 def add_indicators(df):
@@ -54,77 +57,37 @@ def generate_signal(df):
     else:
         return 'Hold'
 
-def tradingview_widget_embed(symbol="BINANCE:BTCUSDT", interval="5", width="100%", height=500):
-    widget_html = f"""
-    <!-- TradingView Widget BEGIN -->
-    <div class="tradingview-widget-container" style="width:{width}; height:{height}px;">
-      <div id="tradingview_{symbol.replace(':','_')}"></div>
-      <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-      <script type="text/javascript">
-      new TradingView.widget(
-      {{
-        "width": "100%",
-        "height": {height},
-        "symbol": "{symbol}",
-        "interval": "{interval}",
-        "timezone": "Etc/UTC",
-        "theme": "light",
-        "style": "1",
-        "locale": "en",
-        "toolbar_bg": "#f1f3f6",
-        "enable_publishing": false,
-        "hide_top_toolbar": true,
-        "save_image": false,
-        "container_id": "tradingview_{symbol.replace(':','_')}"
-      }}
-      );
-      </script>
-    </div>
-    <!-- TradingView Widget END -->
-    """
-    st.components.v1.html(widget_html, height=height, scrolling=False)
-
 def main():
-    st.title("Live BTC/USD, GOLD, BTC Trading Signals & Charts")
+    st.title("Live BTC/USD & GOLD (XAU/USD) Trading Signals with yFinance")
 
     symbol_name = st.selectbox("Select Symbol:", list(SYMBOLS.keys()))
-    symbol = SYMBOLS[symbol_name]
+    timeframe = st.selectbox("Select Timeframe:", list(TIMEFRAMES.keys()))
+    yf_symbol = SYMBOLS[symbol_name]
+    yf_interval = TIMEFRAMES[timeframe]
 
-    timeframe = st.selectbox("Select Timeframe:", TIMEFRAMES)
+    df = fetch_yfinance_data(yf_symbol, interval=yf_interval)
 
-    interval_numeric = timeframe.replace('m', '')  # e.g. '5' or '15' for TradingView widget
+    if df.empty:
+        st.error("Failed to fetch data.")
+        return
 
-    if symbol_name == 'GOLD (XAU/USD)':
-        st.subheader(f"Live TradingView Chart for {symbol_name}")
-        tradingview_widget_embed(symbol=symbol, interval=interval_numeric, height=500)
-        st.info("Signal generation not supported for GOLD (XAU/USD) due to data source limitations.")
-    else:
-        df = fetch_ohlcv(symbol, timeframe, limit=200)
-        if df.empty:
-            st.error("Failed to fetch price data.")
-            return
+    df = add_indicators(df)
+    signal = generate_signal(df)
 
-        df = add_indicators(df)
-        signal = generate_signal(df)
+    st.subheader(f"Latest Signal for {symbol_name} on {timeframe}: {signal}")
 
-        st.subheader(f"Latest Signal for {symbol_name} on {timeframe}: {signal}")
+    fig = go.Figure(data=[go.Candlestick(
+        x=df.index,
+        open=df['open'], high=df['high'],
+        low=df['low'], close=df['close'],
+        name='Price')])
+    fig.add_trace(go.Scatter(x=df.index, y=df['EMA20'], mode='lines', name='EMA20'))
+    fig.add_trace(go.Scatter(x=df.index, y=df['EMA50'], mode='lines', name='EMA50'))
+    fig.update_layout(title=f"{symbol_name} Price Chart", xaxis_title="Time", yaxis_title="Price")
 
-        fig = go.Figure(data=[go.Candlestick(
-            x=df.index,
-            open=df['open'], high=df['high'],
-            low=df['low'], close=df['close'],
-            name='Price')])
-        fig.add_trace(go.Scatter(x=df.index, y=df['EMA20'], mode='lines', name='EMA20'))
-        fig.add_trace(go.Scatter(x=df.index, y=df['EMA50'], mode='lines', name='EMA50'))
-
-        fig.update_layout(title=f"{symbol_name} Price Chart with EMA", xaxis_title="Time", yaxis_title="Price")
-        st.plotly_chart(fig, use_container_width=True)
-
-        st.write("Latest Price Data Snapshot:")
-        st.dataframe(df.tail(5))
-
-        st.subheader("TradingView Chart (live data & tools)")
-        tradingview_widget_embed(symbol="BINANCE:BTCUSDT", interval=interval_numeric, height=500)
+    st.plotly_chart(fig, use_container_width=True)
+    st.write("Latest Price Data Snapshot:")
+    st.dataframe(df.tail(5))
 
 if __name__ == "__main__":
     main()
