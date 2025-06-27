@@ -14,12 +14,18 @@ df = yf.download(symbol, interval="5m", period="1d")
 from ta.trend import EMAIndicator
 df["Close"] = df["Close"].squeeze()
 ema20 = EMAIndicator(close=df["Close"], window=20).ema_indicator()
+if isinstance(ema20.values, np.ndarray) and ema20.values.ndim > 1:
+    ema20 = pd.Series(ema20.values.flatten(), index=df.index, name="EMA20")
 ema20 = pd.Series(EMAIndicator(close=df["Close"], window=20).ema_indicator().values.ravel(), name="EMA20")
 df["EMA20"] = ema20
 ema50 = EMAIndicator(close=df["Close"], window=50).ema_indicator()
+if isinstance(ema50.values, np.ndarray) and ema50.values.ndim > 1:
+    ema50 = pd.Series(ema50.values.flatten(), index=df.index, name="EMA50")
 ema50 = pd.Series(EMAIndicator(close=df["Close"], window=20).ema_indicator().values.ravel(), name="EMA50")
 df["EMA50"] = ema50
-rsi = RSIIndicator(close=df["Close"], window=14).rsi
+rsi = RSIIndicator(close=df["Close"], window=14).rsi()
+if isinstance(rsi.values, np.ndarray) and rsi.values.ndim > 1:
+    rsi = pd.Series(rsi.values.flatten(), index=df.index, name="RSI")
 df["RSI"] = ta.momentum.RSIIndicator(df["Close"]).rsi()
 
 # Display chart
