@@ -1,4 +1,7 @@
+ccxt
+plotly
 streamlit
-yfinance
-ta
 pandas
+numpy
+ta
+streamlit-tradingview-widget
