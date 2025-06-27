@@ -1,7 +1,6 @@
-ccxt
-plotly
 streamlit
 pandas
 numpy
 ta
-streamlit-tradingview-widget
+ccxt
+plotly
