@@ -11,8 +11,10 @@ symbol = st.selectbox("Select Symbol", ["BTC-USD", "ETH-USD", "EURUSD=X", "GBPUS
 df = yf.download(symbol, interval="5m", period="1d")
 
 # Calculate indicators
-df["EMA20"] = ta.trend.ema_indicator(df["Close"], window=20).ema_indicator()
-df["EMA50"] = ta.trend.ema_indicator(df["Close"], window=50).ema_indicator()
+ema20 = EMAIndicator(close=df["Close"], window=20).ema_indicator()
+df["EMA20"] = ema20
+ema50 = EMAIndicator(close=df["Close"], window=50).ema_indicator()
+df["EMA50"] = ema50
 df["RSI"] = ta.momentum.RSIIndicator(df["Close"]).rsi()
 
 # Display chart
