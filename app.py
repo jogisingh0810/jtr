@@ -1,7 +1,10 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import numpy as np  # ✅ Add this
+from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator
+
 
 st.set_page_config(layout="wide")
 
