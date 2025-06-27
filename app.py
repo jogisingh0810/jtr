@@ -1,47 +1,111 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
-import numpy as np  # ✅ Add this
-from ta.momentum import RSIIndicator
-from ta.trend import EMAIndicator
+import ccxt
+import ta
+import plotly.graph_objects as go
+from streamlit_tradingview_widget import tradingview_widget
 
+# Initialize Binance exchange for BTC/USDT data
+exchange = ccxt.binance({'enableRateLimit': True})
 
-st.set_page_config(layout="wide")
+SYMBOLS = {
+    'BTC/USD': 'BTC/USDT',
+    'GOLD (XAU/USD)': 'XAUUSD',  # We'll only show TradingView widget for GOLD
+    'BTC': 'BTC/USDT',
+}
 
-st.title("Joginder Singh's Trading Dashboard")
+TIMEFRAMES = ['5m', '15m']
 
-symbol = st.selectbox("Select Symbol", ["BTC-USD", "ETH-USD", "EURUSD=X", "GBPUSD=X"])
-df = yf.download(symbol, interval="5m", period="1d")
+@st.cache_data(ttl=60)
+def fetch_ohlcv(symbol, timeframe='5m', limit=200):
+    if symbol != 'BTC/USDT':
+        return pd.DataFrame()
+    try:
+        data = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+        df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df.set_index('timestamp', inplace=True)
+        return df
+    except Exception as e:
+        st.warning(f"Error fetching data: {str(e)}")
+        return pd.DataFrame()
 
-# Calculate indicators
-from ta.trend import EMAIndicator
-df["Close"] = df["Close"].squeeze()
-ema20 = df["Close"].ewm(span=20, adjust=False).mean()
-if isinstance(ema20.values, np.ndarray) and ema20.values.ndim > 1:
-    ema20 = pd.Series(ema20.values.flatten(), index=df.index, name="EMA20")
-ema20 = pd.Series(EMAIndicator(close=df["Close"], window=20).ema_indicator().values.ravel(), name="EMA20")
-df["EMA20"] = ema20
-ema50 = df["Close"].ewm(span=50, adjust=False).mean()
-if isinstance(ema50.values, np.ndarray) and ema50.values.ndim > 1:
-    ema50 = pd.Series(ema50.values.flatten(), index=df.index, name="EMA50")
-ema50 = pd.Series(EMAIndicator(close=df["Close"], window=20).ema_indicator().values.ravel(), name="EMA50")
-df["EMA50"] = ema50
-rsi = RSIIndicator(close=df["Close"], window=14).rsi()
-if isinstance(rsi.values, np.ndarray) and rsi.values.ndim > 1:
-    rsi = pd.Series(rsi.values.flatten(), index=df.index, name="RSI")
-df["RSI"] = ta.momentum.RSIIndicator(df["Close"]).rsi()
+def add_indicators(df):
+    if df.empty:
+        return df
+    df['EMA20'] = ta.trend.ema_indicator(df['close'], window=20)
+    df['EMA50'] = ta.trend.ema_indicator(df['close'], window=50)
+    df['RSI'] = ta.momentum.rsi(df['close'], window=14)
+    macd = ta.trend.MACD(df['close'])
+    df['MACD'] = macd.macd()
+    df['MACD_signal'] = macd.macd_signal()
+    return df
 
-# Display chart
-st.line_chart(df[["Close", "EMA20", "EMA50"]])
+def generate_signal(df):
+    if df.empty or len(df) < 2:
+        return 'No data'
+    last = df.iloc[-1]
+    prev = df.iloc[-2]
+    macd_cross_up = (prev['MACD'] < prev['MACD_signal']) and (last['MACD'] > last['MACD_signal'])
+    macd_cross_down = (prev['MACD'] > prev['MACD_signal']) and (last['MACD'] < last['MACD_signal'])
+    if (last['EMA20'] > last['EMA50']) and (last['RSI'] < 70) and macd_cross_up:
+        return 'Buy'
+    elif (last['EMA20'] < last['EMA50']) and (last['RSI'] > 30) and macd_cross_down:
+        return 'Sell'
+    else:
+        return 'Hold'
 
-# Signal logic
-latest = df.iloc[-1]
-signal = ""
-if latest["RSI"] < 30 and latest["EMA20"] > latest["EMA50"]:
-    signal = "Buy Signal"
-elif latest["RSI"] > 70 and latest["EMA20"] < latest["EMA50"]:
-    signal = "Sell Signal"
-else:
-    signal = "No Clear Signal"
+def main():
+    st.title("Live BTC/USD, GOLD, BTC Trading Signals & Charts")
 
-st.subheader(f"Signal: {signal}")
+    symbol_name = st.selectbox("Select Symbol:", list(SYMBOLS.keys()))
+    symbol = SYMBOLS[symbol_name]
+
+    timeframe = st.selectbox("Select Timeframe:", TIMEFRAMES)
+
+    if symbol_name == 'GOLD (XAU/USD)':
+        st.subheader(f"Live TradingView Chart for {symbol_name}")
+        tradingview_widget(
+            symbol="OANDA:XAUUSD",
+            interval=timeframe,
+            width="100%",
+            height=500,
+            locale="en",
+        )
+        st.info("Signal generation not supported for GOLD (XAU/USD) due to data source limitations.")
+    else:
+        df = fetch_ohlcv(symbol, timeframe, limit=200)
+        if df.empty:
+            st.error("Failed to fetch price data.")
+            return
+
+        df = add_indicators(df)
+        signal = generate_signal(df)
+
+        st.subheader(f"Latest Signal for {symbol_name} on {timeframe}: {signal}")
+
+        fig = go.Figure(data=[go.Candlestick(
+            x=df.index,
+            open=df['open'], high=df['high'],
+            low=df['low'], close=df['close'],
+            name='Price')])
+        fig.add_trace(go.Scatter(x=df.index, y=df['EMA20'], mode='lines', name='EMA20'))
+        fig.add_trace(go.Scatter(x=df.index, y=df['EMA50'], mode='lines', name='EMA50'))
+
+        fig.update_layout(title=f"{symbol_name} Price Chart with EMA", xaxis_title="Time", yaxis_title="Price")
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.write("Latest Price Data Snapshot:")
+        st.dataframe(df.tail(5))
+
+        st.subheader("TradingView Chart (live data & tools)")
+        tradingview_widget(
+            symbol="BINANCE:BTCUSDT",
+            interval=timeframe,
+            width="100%",
+            height=500,
+            locale="en",
+        )
+
+if __name__ == "__main__":
+    main()
