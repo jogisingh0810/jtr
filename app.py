@@ -12,7 +12,7 @@ df = yf.download(symbol, interval="5m", period="1d")
 
 # Calculate indicators
 from ta.trend import EMAIndicator
-dtf["Close"] = dtf["Close"].squeeze()
+df["Close"] = df["Close"].squeeze()
 ema20 = EMAIndicator(close=df["Close"], window=20).ema_indicator()
 df["EMA20"] = ema20
 ema50 = EMAIndicator(close=df["Close"], window=50).ema_indicator()
