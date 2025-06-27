@@ -3,14 +3,13 @@ import pandas as pd
 import ccxt
 import ta
 import plotly.graph_objects as go
-from streamlit_tradingview_widget import tradingview_widget
 
 # Initialize Binance exchange for BTC/USDT data
 exchange = ccxt.binance({'enableRateLimit': True})
 
 SYMBOLS = {
     'BTC/USD': 'BTC/USDT',
-    'GOLD (XAU/USD)': 'XAUUSD',  # We'll only show TradingView widget for GOLD
+    'GOLD (XAU/USD)': 'OANDA:XAUUSD',  # TradingView symbol for Gold
     'BTC': 'BTC/USDT',
 }
 
@@ -55,6 +54,36 @@ def generate_signal(df):
     else:
         return 'Hold'
 
+def tradingview_widget_embed(symbol="BINANCE:BTCUSDT", interval="5", width="100%", height=500):
+    widget_html = f"""
+    <!-- TradingView Widget BEGIN -->
+    <div class="tradingview-widget-container" style="width:{width}; height:{height}px;">
+      <div id="tradingview_{symbol.replace(':','_')}"></div>
+      <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+      <script type="text/javascript">
+      new TradingView.widget(
+      {{
+        "width": "100%",
+        "height": {height},
+        "symbol": "{symbol}",
+        "interval": "{interval}",
+        "timezone": "Etc/UTC",
+        "theme": "light",
+        "style": "1",
+        "locale": "en",
+        "toolbar_bg": "#f1f3f6",
+        "enable_publishing": false,
+        "hide_top_toolbar": true,
+        "save_image": false,
+        "container_id": "tradingview_{symbol.replace(':','_')}"
+      }}
+      );
+      </script>
+    </div>
+    <!-- TradingView Widget END -->
+    """
+    st.components.v1.html(widget_html, height=height, scrolling=False)
+
 def main():
     st.title("Live BTC/USD, GOLD, BTC Trading Signals & Charts")
 
@@ -63,15 +92,11 @@ def main():
 
     timeframe = st.selectbox("Select Timeframe:", TIMEFRAMES)
 
+    interval_numeric = timeframe.replace('m', '')  # e.g. '5' or '15' for TradingView widget
+
     if symbol_name == 'GOLD (XAU/USD)':
         st.subheader(f"Live TradingView Chart for {symbol_name}")
-        tradingview_widget(
-            symbol="OANDA:XAUUSD",
-            interval=timeframe,
-            width="100%",
-            height=500,
-            locale="en",
-        )
+        tradingview_widget_embed(symbol=symbol, interval=interval_numeric, height=500)
         st.info("Signal generation not supported for GOLD (XAU/USD) due to data source limitations.")
     else:
         df = fetch_ohlcv(symbol, timeframe, limit=200)
@@ -99,13 +124,7 @@ def main():
         st.dataframe(df.tail(5))
 
         st.subheader("TradingView Chart (live data & tools)")
-        tradingview_widget(
-            symbol="BINANCE:BTCUSDT",
-            interval=timeframe,
-            width="100%",
-            height=500,
-            locale="en",
-        )
+        tradingview_widget_embed(symbol="BINANCE:BTCUSDT", interval=interval_numeric, height=500)
 
 if __name__ == "__main__":
     main()
